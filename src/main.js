@@ -1,22 +1,25 @@
-// бібліотека izitoast
 import iziToast from 'izitoast';
 import 'izitoast/dist/css/iziToast.min.css';
 import SimpleLightbox from 'simplelightbox';
 import 'simplelightbox/dist/simple-lightbox.min.css';
 
-document.addEventListener('DOMContentLoaded', function () {
+document.addEventListener('DOMContentLoaded', () => {
   const form = document.querySelector('.form');
   const gallery = document.querySelector('.gallery');
   const loader = document.querySelector('.loader');
-  let lightbox;
+  const loadMoreBtn = document.querySelector('.button-2');
+  const endMessage = document.querySelector('.end-message');
+  let page = 1;
+  let query = '';
 
   form.addEventListener('submit', onCreateFormSubmit);
+  loadMoreBtn?.addEventListener('click', onLoadMoreClick);
 
-  function onCreateFormSubmit(event) {
+  async function onCreateFormSubmit(event) {
     event.preventDefault();
-    const nameImage = event.target.elements.query.value;
+    query = event.target.elements.query.value.trim();
 
-    if (nameImage.trim() === '') {
+    if (query === '') {
       return iziToast.error({
         message: 'Введіть вірне значення!',
         position: 'topRight',
@@ -25,57 +28,87 @@ document.addEventListener('DOMContentLoaded', function () {
 
     loader.style.display = 'inline-block';
 
-    gallery.innerHTML = '';
+    try {
+      page = 1;
+      gallery.innerHTML = ''; // Очищаємо галерею при новому пошуку
+      await giveImages(query, page);
+      smoothScrollToGallery();
+    } catch (error) {
+      console.error('Error:', error);
+    } finally {
+      loader.style.display = 'none';
+      // checkLoadBtnVisibility();
+    }
 
-    giveImages(nameImage);
     event.target.reset();
   }
 
-  function giveImages(nameImage) {
+  async function onLoadMoreClick() {
+    loader.style.display = 'inline-block';
+
+    try {
+      page += 1;
+      await giveImages(query, page);
+      smoothScrollToGallery();
+    } catch (error) {
+      console.error('Error:', error);
+    } finally {
+      loader.style.display = 'none';
+      // checkLoadBtnVisibility();
+    }
+  }
+
+  async function giveImages(nameImage, page) {
     const BASE_URL = 'https://pixabay.com/api/';
     const KEY = '?key=42272316-28c697ce0580eb37211383c7d';
     const Q = `&q=${nameImage}`;
     const IMAGE_TYPE = '&image_type=photo';
     const ORIENTATION = '&orientation=horizontal';
     const SAFESEARCH = '&safesearch=true';
-    const url = BASE_URL + KEY + Q + IMAGE_TYPE + ORIENTATION + SAFESEARCH;
+    const PER_PAGE = '&per_page=15';
+    const PAGE = `&page=${page}`;
+    const url =
+      BASE_URL +
+      KEY +
+      Q +
+      IMAGE_TYPE +
+      ORIENTATION +
+      SAFESEARCH +
+      PER_PAGE +
+      PAGE;
 
-    fetch(url)
-      .then(res => {
-        if (!res.ok) {
-          throw new Error('Network response was not ok');
-        }
-        return res.json();
-      })
-      .then(data => {
-        if (data && data.hits && data.hits.length > 0) {
-          renderTicker(data);
-        } else {
-          iziToast.error({
-            message:
-              'Sorry, there are no images matching your search query. Please try again!',
-            position: 'topRight',
-          });
-        }
-      })
-      .catch(error => {
-        console.error('Error:', error);
-      })
-      .finally(() => {
-        loader.style.display = 'none';
-      });
+    try {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error('Network response was not ok');
+      const data = await res.json();
+
+      if (data && data.hits && data.hits.length > 0) {
+        renderImages(data);
+        updateLoadMoreButton(data.totalHits, page);
+      } else {
+        iziToast.error({
+          message: 'No images found.',
+          position: 'topRight',
+        });
+        hideLoader();
+        loadMoreBtn?.classList.add('hidden');
+        endMessage.classList.remove('hidden');
+      }
+    } catch (error) {
+      throw error;
+    }
   }
 
-  function renderTicker(data) {
+  function renderImages(data) {
     const markup = data.hits.map(templateImage).join('');
-    gallery.innerHTML = markup;
+    gallery.insertAdjacentHTML('beforeend', markup);
 
     const galleryLinks = document.querySelectorAll('.gallery-link');
     galleryLinks.forEach(link => {
       link.setAttribute('href', link.querySelector('img').getAttribute('src'));
     });
 
-    lightbox = new SimpleLightbox('.gallery a', {
+    const lightbox = new SimpleLightbox('.gallery a', {
       captionsData: 'alt',
       captionDelay: 250,
     });
@@ -92,13 +125,9 @@ document.addEventListener('DOMContentLoaded', function () {
     comments,
     downloads,
   }) {
-    return `<li class="gallery-item" >
+    return `<li class="gallery-item">
       <a class="gallery-link" href="${largeImageURL}">
-        <img
-          class="gallery-image"
-          src="${webformatURL}"
-          alt="${tags}"
-        />
+        <img class="gallery-image" src="${webformatURL}" alt="${tags}" />
       </a>
       <div class="item-text">
         <ul>Likes<li>${likes}</li></ul>
@@ -107,5 +136,34 @@ document.addEventListener('DOMContentLoaded', function () {
         <ul>Downloads<li>${downloads}</li></ul>
       </div>
     </li>`;
+  }
+
+  function updateLoadMoreButton(totalHits, currentPage) {
+    const maxPage = Math.ceil(totalHits / 15);
+
+    if (currentPage >= maxPage) {
+      loadMoreBtn.classList.add('hidden');
+      endMessage.classList.remove('hidden');
+    } else {
+      loadMoreBtn.classList.remove('hidden');
+      endMessage.classList.add('hidden');
+    }
+  }
+
+  const showLoader = () => (loader.style.display = 'inline-block');
+  const hideLoader = () => (loader.style.display = 'none');
+
+  function smoothScrollToGallery() {
+    const galleryItemHeight = getGalleryItemHeight();
+    window.scrollBy({
+      top: galleryItemHeight * 2, // Прокрутити на дві висоти карточки галереї
+      behavior: 'smooth',
+    });
+  }
+
+  function getGalleryItemHeight() {
+    const galleryItem = document.querySelector('.gallery-item');
+    const galleryItemRect = galleryItem.getBoundingClientRect();
+    return galleryItemRect.height;
   }
 });

@@ -143,3 +143,26 @@ button:hover {
     transform: rotate(360deg);
   }
 }
+
+.hidden {
+  display: none !important;
+}
+
+.button-2 {
+  align-items: center;
+  position: relative;
+}
+
+.loader {
+  width: 68px;
+  height: 68px;
+  border-radius: 50%;
+  display: none;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: linear-gradient(0deg, rgba(255, 61, 0, 0.2) 33%, #ff3d00 100%);
+  box-sizing: border-box;
+  animation: rotation 1s linear infinite;
+}
